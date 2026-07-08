@@ -1,4 +1,11 @@
+import path from 'path';
 import { pool } from '../config/db.js';
+
+// file_path veritabanında tam sunucu yolu olarak tutulur (örn: "src/uploads/168...pdf").
+// Tarayıcının dosyaya ulaşabilmesi için sadece dosya adını çıkarıp /uploads altında sunuyoruz.
+function withFileName(row) {
+  return { ...row, file_name: path.basename(row.file_path) };
+}
 
 // POST /api/submissions
 // Yazar bir bildiri/makale yükler ve belirli bir temaya bağlar.
@@ -63,7 +70,7 @@ export async function getMySubmissions(req, res) {
        ORDER BY s.submitted_at DESC`,
       [req.user.id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(withFileName));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Bildiriler getirilirken hata oluştu.' });
@@ -87,7 +94,7 @@ export async function getAssignedSubmissions(req, res) {
        ORDER BY s.submitted_at DESC`,
       [req.user.id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(withFileName));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Atanan bildiriler getirilirken hata oluştu.' });

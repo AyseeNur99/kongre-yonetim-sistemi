@@ -27,16 +27,18 @@ router.get('/', requireAuth, async (req, res) => {
 // POST /api/congresses -> sadece admin yeni kongre oluşturabilir
 router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
   const { title, description, start_date, end_date, submission_deadline } = req.body;
+  // Boş string gelen tarih alanları PostgreSQL'de hataya sebep olur, bu yüzden null'a çeviriyoruz.
+  const toDateOrNull = (v) => (v && v.trim() !== '' ? v : null);
   try {
     const result = await pool.query(
       `INSERT INTO congresses (title, description, start_date, end_date, submission_deadline)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [title, description, start_date, end_date, submission_deadline]
+      [title, description, toDateOrNull(start_date), toDateOrNull(end_date), toDateOrNull(submission_deadline)]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Kongre oluşturulurken hata oluştu.' });
+    res.status(500).json({ error: 'Kongre oluşturulurken hata oluştu.', detail: err.message });
   }
 });
 
