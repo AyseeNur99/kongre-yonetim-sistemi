@@ -9,7 +9,7 @@ gönderme ve hakem değerlendirme sistemi.
 - **Veritabanı:** PostgreSQL
 - **Kimlik doğrulama:** JWT (JSON Web Token)
 - **Dosya yükleme:** Multer
-- **Frontend:** React (bir sonraki adımda ekleyeceğiz)
+- **Frontend:** React
 
 ## Sistem Mantığı
 
