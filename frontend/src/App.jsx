@@ -330,7 +330,7 @@ function Dashboard({ token, user, onLogout }) {
         {tab === "assigned" && (
           <AssignedReviews token={token} items={assigned} onReviewed={loadAll} />
         )}
-        {tab === "admin" && <AdminPanel token={token} onCreated={loadAll} />}
+        {tab === "admin" && <AdminPanel token={token} onCreated={loadAll} congresses={congresses} />}
       </main>
     </div>
   );
@@ -686,7 +686,7 @@ function AssignedReviews({ token, items, onReviewed }) {
   );
 }
 
-function AdminPanel({ token, onCreated }) {
+function AdminPanel({ token, onCreated, congresses }) {
   const [congress, setCongress] = useState({ title: "", description: "", start_date: "", end_date: "", submission_deadline: "" });
   const [theme, setTheme] = useState({ congress_id: "", name: "", description: "" });
   const [msg, setMsg] = useState("");
@@ -695,17 +695,25 @@ function AdminPanel({ token, onCreated }) {
   const [submissions, setSubmissions] = useState([]);
   const [reviewers, setReviewers] = useState([]);
   const [picks, setPicks] = useState({}); // { [submissionId]: reviewerIdSeçili }
+  const [allUsers, setAllUsers] = useState([]);
+
+  const [editingCongressId, setEditingCongressId] = useState(null);
+  const [editCongressForm, setEditCongressForm] = useState({});
+  const [editingThemeId, setEditingThemeId] = useState(null);
+  const [editThemeForm, setEditThemeForm] = useState({});
 
   const authHeaders = { Authorization: `Bearer ${token}` };
 
   const loadAssignmentData = useCallback(async () => {
     try {
-      const [sRes, rRes] = await Promise.all([
+      const [sRes, rRes, uRes] = await Promise.all([
         fetch(`${API}/submissions/all`, { headers: authHeaders }),
         fetch(`${API}/users/reviewers`, { headers: authHeaders }),
+        fetch(`${API}/users`, { headers: authHeaders }),
       ]);
       setSubmissions(await sRes.json());
       setReviewers(await rRes.json());
+      setAllUsers(await uRes.json());
     } catch (e) {
       setErr("Hakem atama verileri yüklenemedi.");
     }
@@ -788,6 +796,117 @@ function AdminPanel({ token, onCreated }) {
     }
   };
 
+  const startEditCongress = (c) => {
+    setEditingCongressId(c.id);
+    setEditCongressForm({
+      title: c.title,
+      description: c.description || "",
+      start_date: c.start_date ? c.start_date.slice(0, 10) : "",
+      end_date: c.end_date ? c.end_date.slice(0, 10) : "",
+      submission_deadline: c.submission_deadline ? c.submission_deadline.slice(0, 10) : "",
+    });
+  };
+
+  const saveCongress = async (id) => {
+    setErr("");
+    try {
+      const res = await fetch(`${API}/congresses/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify(editCongressForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Güncelleme başarısız.");
+      setEditingCongressId(null);
+      onCreated();
+    } catch (e2) {
+      setErr(e2.message);
+    }
+  };
+
+  const deleteCongress = async (id) => {
+    setErr("");
+    try {
+      const impactRes = await fetch(`${API}/congresses/${id}/delete-impact`, { headers: authHeaders });
+      const impact = await impactRes.json();
+      const warn =
+        impact.submissionCount > 0
+          ? `Bu kongrenin altında ${impact.themeCount} tema ve ${impact.submissionCount} bildiri var. Silersen HEPSİ kalıcı olarak silinecek. Emin misin?`
+          : `Bu kongreyi silmek istediğine emin misin? (${impact.themeCount} tema silinecek)`;
+      if (!window.confirm(warn)) return;
+
+      const res = await fetch(`${API}/congresses/${id}`, { method: "DELETE", headers: authHeaders });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Silme başarısız.");
+      onCreated();
+    } catch (e2) {
+      setErr(e2.message);
+    }
+  };
+
+  const startEditTheme = (t) => {
+    setEditingThemeId(t.id);
+    setEditThemeForm({ name: t.name, description: t.description || "" });
+  };
+
+  const saveTheme = async (congressId, themeId) => {
+    setErr("");
+    try {
+      const res = await fetch(`${API}/congresses/${congressId}/themes/${themeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify(editThemeForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Güncelleme başarısız.");
+      setEditingThemeId(null);
+      onCreated();
+    } catch (e2) {
+      setErr(e2.message);
+    }
+  };
+
+  const deleteTheme = async (congressId, themeId) => {
+    setErr("");
+    try {
+      const impactRes = await fetch(`${API}/congresses/${congressId}/themes/${themeId}/delete-impact`, {
+        headers: authHeaders,
+      });
+      const impact = await impactRes.json();
+      const warn =
+        impact.submissionCount > 0
+          ? `Bu temanın altında ${impact.submissionCount} bildiri var. Silersen HEPSİ kalıcı olarak silinecek. Emin misin?`
+          : "Bu temayı silmek istediğine emin misin?";
+      if (!window.confirm(warn)) return;
+
+      const res = await fetch(`${API}/congresses/${congressId}/themes/${themeId}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Silme başarısız.");
+      onCreated();
+    } catch (e2) {
+      setErr(e2.message);
+    }
+  };
+
+  const changeRole = async (userId, newRole) => {
+    setErr("");
+    try {
+      const res = await fetch(`${API}/users/${userId}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Rol güncellenemedi.");
+      loadAssignmentData();
+    } catch (e2) {
+      setErr(e2.message);
+    }
+  };
+
   return (
     <div className="grid md:grid-cols-2 gap-8">
       <div>
@@ -826,6 +945,147 @@ function AdminPanel({ token, onCreated }) {
           {err}
         </p>
       )}
+
+      <div className="md:col-span-2 pt-4" style={{ borderTop: `1px solid ${C.line}` }}>
+        <h2 style={serif} className="text-lg font-semibold mb-3 mt-4">Kullanıcı Yönetimi</h2>
+        <p className="text-xs mb-3" style={{ color: C.inkSoft }}>
+          Yeni kayıt olan herkes varsayılan olarak "Yazar" rolüyle başlar. Birini hakem veya
+          admin yapmak için aşağıdan rolünü değiştir.
+        </p>
+        {allUsers.length === 0 ? (
+          <p className="text-sm" style={{ color: C.inkSoft }}>Henüz kullanıcı yok.</p>
+        ) : (
+          <div className="space-y-2">
+            {allUsers.map((u) => (
+              <div
+                key={u.id}
+                className="flex items-center justify-between rounded-xl p-3"
+                style={{ border: `1px solid ${C.line}` }}
+              >
+                <div>
+                  <div className="text-sm font-semibold">{u.full_name}</div>
+                  <div className="text-xs" style={{ color: C.inkSoft }}>{u.email}</div>
+                </div>
+                <select
+                  className={inputClass}
+                  style={{ ...inputStyle, maxWidth: 160 }}
+                  value={u.role}
+                  onChange={(e) => changeRole(u.id, e.target.value)}
+                >
+                  <option value="author">Yazar</option>
+                  <option value="reviewer">Hakem</option>
+                  <option value="admin">Yönetici</option>
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="md:col-span-2 pt-4" style={{ borderTop: `1px solid ${C.line}` }}>
+        <h2 style={serif} className="text-lg font-semibold mb-3 mt-4">Kongre / Tema Yönetimi</h2>
+        {congresses.length === 0 ? (
+          <p className="text-sm" style={{ color: C.inkSoft }}>Henüz kongre yok.</p>
+        ) : (
+          <div className="space-y-4">
+            {congresses.map((c) => (
+              <div key={c.id} className="rounded-xl p-4" style={{ border: `1px solid ${C.line}` }}>
+                {editingCongressId === c.id ? (
+                  <div className="space-y-2">
+                    <input
+                      className={inputClass}
+                      style={inputStyle}
+                      value={editCongressForm.title}
+                      onChange={(e) => setEditCongressForm({ ...editCongressForm, title: e.target.value })}
+                    />
+                    <input
+                      className={inputClass}
+                      style={inputStyle}
+                      value={editCongressForm.description}
+                      onChange={(e) => setEditCongressForm({ ...editCongressForm, description: e.target.value })}
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="date"
+                        className={inputClass}
+                        style={inputStyle}
+                        value={editCongressForm.start_date}
+                        onChange={(e) => setEditCongressForm({ ...editCongressForm, start_date: e.target.value })}
+                      />
+                      <input
+                        type="date"
+                        className={inputClass}
+                        style={inputStyle}
+                        value={editCongressForm.submission_deadline}
+                        onChange={(e) => setEditCongressForm({ ...editCongressForm, submission_deadline: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="success" onClick={() => saveCongress(c.id)}>Kaydet</Button>
+                      <Button variant="ghost" onClick={() => setEditingCongressId(null)}>Vazgeç</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-sm">{c.title}</div>
+                      <div className="text-xs" style={{ color: C.inkSoft }}>{c.description}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => startEditCongress(c)} className="p-2 rounded-lg" style={{ border: `1px solid ${C.line}`, color: C.primary }}>
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => deleteCongress(c.id)} className="p-2 rounded-lg" style={{ border: `1px solid ${C.line}`, color: C.danger }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-3 pl-3 space-y-2" style={{ borderLeft: `2px solid ${C.line}` }}>
+                  {c.themes.map((t) => (
+                    <div key={t.id}>
+                      {editingThemeId === t.id ? (
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <input
+                            className={inputClass}
+                            style={{ ...inputStyle, maxWidth: 160 }}
+                            value={editThemeForm.name}
+                            onChange={(e) => setEditThemeForm({ ...editThemeForm, name: e.target.value })}
+                          />
+                          <input
+                            className={inputClass}
+                            style={{ ...inputStyle, maxWidth: 200 }}
+                            value={editThemeForm.description}
+                            onChange={(e) => setEditThemeForm({ ...editThemeForm, description: e.target.value })}
+                          />
+                          <Button variant="success" onClick={() => saveTheme(c.id, t.id)}>Kaydet</Button>
+                          <Button variant="ghost" onClick={() => setEditingThemeId(null)}>Vazgeç</Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-sm">
+                          <span>{t.name} <span style={{ color: C.inkSoft }}>— {t.description}</span></span>
+                          <div className="flex gap-1">
+                            <button onClick={() => startEditTheme(t)} className="p-1.5 rounded-lg" style={{ border: `1px solid ${C.line}`, color: C.primary }}>
+                              <Pencil size={12} />
+                            </button>
+                            <button onClick={() => deleteTheme(c.id, t.id)} className="p-1.5 rounded-lg" style={{ border: `1px solid ${C.line}`, color: C.danger }}>
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {c.themes.length === 0 && (
+                    <span className="text-xs" style={{ color: C.inkSoft }}>Bu kongrede tema yok.</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="md:col-span-2 pt-4" style={{ borderTop: `1px solid ${C.line}` }}>
         <h2 style={serif} className="text-lg font-semibold mb-3 mt-4">Hakem Atama</h2>
