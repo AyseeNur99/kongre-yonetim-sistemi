@@ -339,32 +339,53 @@ function Dashboard({ token, user, onLogout }) {
 function CongressList({ congresses }) {
   if (congresses.length === 0)
     return <Empty text="Henüz bir kongre oluşturulmamış. Admin panelinden ekleyebilirsin." />;
+
+  const isPast = (dateStr) => dateStr && new Date() > new Date(dateStr);
+
   return (
     <div className="space-y-4">
       <h2 style={serif} className="text-xl font-semibold mb-2">Kongreler</h2>
-      {congresses.map((c) => (
-        <div key={c.id} className="rounded-xl p-5" style={{ border: `1px solid ${C.line}` }}>
-          <div className="flex items-center justify-between">
-            <div className="font-semibold">{c.title}</div>
-            <span className="text-xs" style={{ color: C.inkSoft }}>ID: {c.id}</span>
-          </div>
-          <p className="text-sm mt-1" style={{ color: C.inkSoft }}>{c.description}</p>
-          <div className="flex flex-wrap gap-2 mt-3">
-            {c.themes.map((t) => (
-              <span
-                key={t.id}
-                className="text-xs rounded-full px-3 py-1"
-                style={{ background: C.paper, color: C.primaryDark, border: `1px solid ${C.line}` }}
+      {congresses.map((c) => {
+        const deadlinePassed = isPast(c.submission_deadline);
+        return (
+          <div key={c.id} className="rounded-xl p-5" style={{ border: `1px solid ${C.line}` }}>
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">{c.title}</div>
+              <span className="text-xs" style={{ color: C.inkSoft }}>ID: {c.id}</span>
+            </div>
+            <p className="text-sm mt-1" style={{ color: C.inkSoft }}>{c.description}</p>
+
+            {c.submission_deadline && (
+              <div
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold mt-2"
+                style={{
+                  background: deadlinePassed ? "#F3E4E1" : "#F1E7D8",
+                  color: deadlinePassed ? C.danger : C.accent,
+                }}
               >
-                {t.name}
-              </span>
-            ))}
-            {c.themes.length === 0 && (
-              <span className="text-xs" style={{ color: C.inkSoft }}>Henüz tema eklenmemiş</span>
+                <Clock size={12} />
+                Son başvuru: {new Date(c.submission_deadline).toLocaleDateString("tr-TR")}
+                {deadlinePassed && " (Süre doldu)"}
+              </div>
             )}
+
+            <div className="flex flex-wrap gap-2 mt-3">
+              {c.themes.map((t) => (
+                <span
+                  key={t.id}
+                  className="text-xs rounded-full px-3 py-1"
+                  style={{ background: C.paper, color: C.primaryDark, border: `1px solid ${C.line}` }}
+                >
+                  {t.name}
+                </span>
+              ))}
+              {c.themes.length === 0 && (
+                <span className="text-xs" style={{ color: C.inkSoft }}>Henüz tema eklenmemiş</span>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -408,7 +429,10 @@ function SubmitForm({ token, congresses, onDone }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const allThemes = congresses.flatMap((c) => c.themes.map((t) => ({ ...t, congressTitle: c.title })));
+  const allThemes = congresses.flatMap((c) =>
+    c.themes.map((t) => ({ ...t, congressTitle: c.title, deadline: c.submission_deadline }))
+  );
+  const isPast = (dateStr) => dateStr && new Date() > new Date(dateStr);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -444,7 +468,10 @@ function SubmitForm({ token, congresses, onDone }) {
           <select required className={inputClass} style={inputStyle} value={themeId} onChange={(e) => setThemeId(e.target.value)}>
             <option value="">Seç...</option>
             {allThemes.map((t) => (
-              <option key={t.id} value={t.id}>{t.congressTitle} — {t.name}</option>
+              <option key={t.id} value={t.id} disabled={isPast(t.deadline)}>
+                {t.congressTitle} — {t.name}
+                {isPast(t.deadline) ? " (Süre doldu)" : ""}
+              </option>
             ))}
           </select>
         </Field>

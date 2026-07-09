@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { pool } from '../config/db.js';
 
@@ -28,6 +29,30 @@ export async function createSubmission(req, res) {
   }
 
   try {
+    // Temanın bağlı olduğu kongrenin son başvuru tarihini kontrol ediyoruz.
+    // submission_deadline boş bırakılmışsa (null) süre sınırı yok kabul edilir.
+    const themeInfo = await pool.query(
+      `SELECT c.submission_deadline
+       FROM themes t
+       JOIN congresses c ON t.congress_id = c.id
+       WHERE t.id = $1`,
+      [theme_id]
+    );
+
+    if (themeInfo.rows.length === 0) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ error: 'Geçersiz tema seçildi.' });
+    }
+
+    const deadline = themeInfo.rows[0].submission_deadline;
+    if (deadline && new Date() > new Date(deadline)) {
+      // Süre geçtiyse yüklenen dosyayı diskte bırakmıyoruz, temizliyoruz.
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({
+        error: `Bu kongre için son başvuru tarihi (${new Date(deadline).toLocaleDateString('tr-TR')}) geçmiş, bildiri gönderilemez.`,
+      });
+    }
+
     const file_path = req.file.path;
 
     const result = await pool.query(
