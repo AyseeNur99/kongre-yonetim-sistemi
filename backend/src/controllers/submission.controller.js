@@ -218,3 +218,90 @@ export async function unassignReviewer(req, res) {
     res.status(500).json({ error: 'Atama kaldırılırken hata oluştu.' });
   }
 }
+
+// DELETE /api/submissions/:id
+// Yazar, kendi bildirisini silebilir — ama SADECE henüz hiçbir hakem oy vermediyse.
+// Aksi halde bir hakemin verdiği kararı ortadan kaldırmış oluruz, bu veri bütünlüğünü bozar.
+export async function deleteSubmission(req, res) {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const submission = await pool.query(`SELECT * FROM submissions WHERE id = $1`, [id]);
+    if (submission.rows.length === 0) {
+      return res.status(404).json({ error: 'Bildiri bulunamadı.' });
+    }
+
+    const sub = submission.rows[0];
+
+    // Sadece bildirinin sahibi (ya da admin) silebilir
+    if (sub.author_id !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Bu bildiriyi silme yetkiniz yok.' });
+    }
+
+    const reviewCount = await pool.query(`SELECT COUNT(*) FROM reviews WHERE submission_id = $1`, [id]);
+    if (parseInt(reviewCount.rows[0].count, 10) > 0) {
+      return res.status(400).json({
+        error: 'Bu bildiriye en az bir hakem oy verdiği için artık silinemez.',
+      });
+    }
+
+    // Veritabanı kaydını sil (reviewer_assignments otomatik olarak CASCADE ile silinir)
+    await pool.query(`DELETE FROM submissions WHERE id = $1`, [id]);
+
+    // Diskteki dosyayı da temizle (hata olursa sessizce geç, kritik değil)
+    fs.unlink(sub.file_path, () => {});
+
+    res.json({ message: 'Bildiri silindi.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Bildiri silinirken hata oluştu.' });
+  }
+}
+
+// PATCH /api/submissions/:id
+// Yazar, kendi bildirisinin başlığını/özetini düzenleyebilir, isterse dosyayı değiştirebilir.
+// Silmede olduğu gibi aynı kural geçerli: henüz hiç hakem oy vermediyse düzenlenebilir.
+export async function updateSubmission(req, res) {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const { title, abstract } = req.body;
+
+  try {
+    const submission = await pool.query(`SELECT * FROM submissions WHERE id = $1`, [id]);
+    if (submission.rows.length === 0) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(404).json({ error: 'Bildiri bulunamadı.' });
+    }
+
+    const sub = submission.rows[0];
+
+    if (sub.author_id !== userId && req.user.role !== 'admin') {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(403).json({ error: 'Bu bildiriyi düzenleme yetkiniz yok.' });
+    }
+
+    const reviewCount = await pool.query(`SELECT COUNT(*) FROM reviews WHERE submission_id = $1`, [id]);
+    if (parseInt(reviewCount.rows[0].count, 10) > 0) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(400).json({
+        error: 'Bu bildiriye en az bir hakem oy verdiği için artık düzenlenemez.',
+      });
+    }
+
+    // Yeni bir dosya yüklendiyse eskisini diskten sil, yenisini kullan.
+    // Yüklenmediyse mevcut dosya yolunu koru.
+    const newFilePath = req.file ? req.file.path : sub.file_path;
+    if (req.file) fs.unlink(sub.file_path, () => {});
+
+    const result = await pool.query(
+      `UPDATE submissions SET title = $1, abstract = $2, file_path = $3 WHERE id = $4 RETURNING *`,
+      [title ?? sub.title, abstract ?? sub.abstract, newFilePath, id]
+    );
+
+    res.json(withFileName(result.rows[0]));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Bildiri güncellenirken hata oluştu.' });
+  }
+}

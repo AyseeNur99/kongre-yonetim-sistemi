@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { FileText, LogOut, Upload, Users, Building2, CheckCircle2, XCircle, Clock, Plus, ChevronRight } from "lucide-react";
+import { FileText, LogOut, Upload, Users, Building2, CheckCircle2, XCircle, Clock, Plus, ChevronRight, Trash2, Pencil, Save, X } from "lucide-react";
 
 const API = "http://localhost:5000/api";
 const FILES_BASE = "http://localhost:5000/uploads";
@@ -323,7 +323,7 @@ function Dashboard({ token, user, onLogout }) {
         )}
 
         {tab === "congresses" && <CongressList congresses={congresses} />}
-        {tab === "mine" && <MySubmissions items={mySubmissions} />}
+        {tab === "mine" && <MySubmissions items={mySubmissions} token={token} onChanged={loadAll} />}
         {tab === "submit" && (
           <SubmitForm token={token} congresses={congresses} onDone={() => { loadAll(); setTab("mine"); }} />
         )}
@@ -390,33 +390,167 @@ function CongressList({ congresses }) {
   );
 }
 
-function MySubmissions({ items }) {
+function MySubmissions({ items, token, onChanged }) {
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ title: "", abstract: "", file: null });
+
+  const remove = async (id) => {
+    if (!window.confirm("Bu bildiriyi silmek istediğine emin misin? Bu işlem geri alınamaz.")) return;
+    setBusyId(id);
+    setError("");
+    try {
+      const res = await fetch(`${API}/submissions/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Silme başarısız.");
+      onChanged();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const startEdit = (s) => {
+    setEditingId(s.id);
+    setEditForm({ title: s.title, abstract: s.abstract || "", file: null });
+    setError("");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({ title: "", abstract: "", file: null });
+  };
+
+  const saveEdit = async (id) => {
+    setBusyId(id);
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("title", editForm.title);
+      fd.append("abstract", editForm.abstract);
+      if (editForm.file) fd.append("file", editForm.file);
+      const res = await fetch(`${API}/submissions/${id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Güncelleme başarısız.");
+      setEditingId(null);
+      onChanged();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   if (items.length === 0) return <Empty text="Henüz bildiri göndermedin. 'Yeni Bildiri' sekmesinden başlayabilirsin." />;
   return (
     <div className="space-y-3">
       <h2 style={serif} className="text-xl font-semibold mb-2">Bildirilerim</h2>
-      {items.map((s) => (
-        <div key={s.id} className="rounded-xl p-5" style={{ border: `1px solid ${C.line}` }}>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="font-semibold">{s.title}</div>
-              <div className="text-xs mt-1" style={{ color: C.inkSoft }}>
-                {s.congress_title} · {s.theme_name}
+      {error && (
+        <p className="text-sm rounded-lg px-3 py-2" style={{ background: "#F3E4E1", color: C.danger }}>{error}</p>
+      )}
+      {items.map((s) => {
+        const voteStarted = s.approved_count > 0 || s.rejected_count > 0;
+        const isEditing = editingId === s.id;
+        return (
+          <div key={s.id} className="rounded-xl p-5" style={{ border: `1px solid ${C.line}` }}>
+            {isEditing ? (
+              <div className="space-y-3">
+                <Field label="Başlık">
+                  <input
+                    className={inputClass}
+                    style={inputStyle}
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  />
+                </Field>
+                <Field label="Özet">
+                  <textarea
+                    rows={3}
+                    className={inputClass}
+                    style={inputStyle}
+                    value={editForm.abstract}
+                    onChange={(e) => setEditForm({ ...editForm, abstract: e.target.value })}
+                  />
+                </Field>
+                <Field label="Yeni dosya (isteğe bağlı, mevcut dosyanın yerine geçer)">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    className="text-sm"
+                    onChange={(e) => setEditForm({ ...editForm, file: e.target.files[0] })}
+                  />
+                </Field>
+                <div className="flex gap-2">
+                  <Button variant="success" disabled={busyId === s.id} onClick={() => saveEdit(s.id)}>
+                    <span className="inline-flex items-center gap-1"><Save size={14} /> Kaydet</span>
+                  </Button>
+                  <Button variant="ghost" onClick={cancelEdit}>
+                    <span className="inline-flex items-center gap-1"><X size={14} /> Vazgeç</span>
+                  </Button>
+                </div>
               </div>
-              <FileLink fileName={s.file_name} />
-            </div>
-            <StatusBadge status={s.status} />
-          </div>
-
-          <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.line}` }}>
-            {s.total_reviewers > 0 ? (
-              <VoteMeter approved={s.approved_count} rejected={s.rejected_count} total={s.total_reviewers} />
             ) : (
-              <span className="text-xs" style={{ color: C.inkSoft }}>Henüz hakem atanmamış.</span>
+              <>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-semibold">{s.title}</div>
+                    <div className="text-xs mt-1" style={{ color: C.inkSoft }}>
+                      {s.congress_title} · {s.theme_name}
+                    </div>
+                    <FileLink fileName={s.file_name} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={s.status} />
+                    {!voteStarted && (
+                      <>
+                        <button
+                          onClick={() => startEdit(s)}
+                          title="Bildiriyi düzenle"
+                          className="p-2 rounded-lg"
+                          style={{ border: `1px solid ${C.line}`, color: C.primary }}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => remove(s.id)}
+                          disabled={busyId === s.id}
+                          title="Bildiriyi sil"
+                          className="p-2 rounded-lg"
+                          style={{ border: `1px solid ${C.line}`, color: C.danger }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.line}` }}>
+                  {s.total_reviewers > 0 ? (
+                    <VoteMeter approved={s.approved_count} rejected={s.rejected_count} total={s.total_reviewers} />
+                  ) : (
+                    <span className="text-xs" style={{ color: C.inkSoft }}>Henüz hakem atanmamış.</span>
+                  )}
+                </div>
+                {!voteStarted && (
+                  <p className="text-xs mt-2" style={{ color: C.inkSoft }}>
+                    Henüz oy verilmedi, bu bildiriyi düzenleyebilir ya da silebilirsin.
+                  </p>
+                )}
+              </>
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

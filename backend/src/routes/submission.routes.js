@@ -9,6 +9,8 @@ import {
   getAllSubmissionsForAdmin,
   assignReviewer,
   unassignReviewer,
+  deleteSubmission,
+  updateSubmission,
 } from '../controllers/submission.controller.js';
 
 const router = Router();
@@ -49,5 +51,11 @@ router.get('/all', requireAuth, requireRole('admin'), getAllSubmissionsForAdmin)
 // Admin: bir bildiriye manuel hakem ata / atamayı kaldır
 router.post('/:id/reviewers', requireAuth, requireRole('admin'), assignReviewer);
 router.delete('/:id/reviewers/:reviewerId', requireAuth, requireRole('admin'), unassignReviewer);
+
+// Yazar: kendi bildirisini sil (henüz hiç oy verilmemişse)
+router.delete('/:id', requireAuth, deleteSubmission);
+
+// Yazar: kendi bildirisini düzenle (başlık/özet, isteğe bağlı yeni dosya) — henüz hiç oy verilmemişse
+router.patch('/:id', requireAuth, upload.single('file'), updateSubmission);
 
 export default router;
