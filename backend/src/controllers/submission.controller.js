@@ -100,3 +100,84 @@ export async function getAssignedSubmissions(req, res) {
     res.status(500).json({ error: 'Atanan bildiriler getirilirken hata oluştu.' });
   }
 }
+
+// GET /api/submissions/all
+// Admin: sistemdeki tüm bildirileri, atanan hakemleri ve oy durumlarıyla birlikte listeler
+export async function getAllSubmissionsForAdmin(req, res) {
+  try {
+    const subs = await pool.query(
+      `SELECT s.*, u.full_name AS author_name, t.name AS theme_name, c.title AS congress_title
+       FROM submissions s
+       JOIN users u ON s.author_id = u.id
+       JOIN themes t ON s.theme_id = t.id
+       JOIN congresses c ON t.congress_id = c.id
+       ORDER BY s.submitted_at DESC`
+    );
+
+    const assignments = await pool.query(
+      `SELECT ra.submission_id, ra.reviewer_id, u.full_name AS reviewer_name,
+              r.decision
+       FROM reviewer_assignments ra
+       JOIN users u ON ra.reviewer_id = u.id
+       LEFT JOIN reviews r ON r.submission_id = ra.submission_id AND r.reviewer_id = ra.reviewer_id`
+    );
+
+    const data = subs.rows.map(withFileName).map((s) => ({
+      ...s,
+      reviewers: assignments.rows.filter((a) => a.submission_id === s.id),
+    }));
+
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Bildiriler getirilirken hata oluştu.' });
+  }
+}
+
+// POST /api/submissions/:id/reviewers
+// Admin: bir bildiriye manuel olarak bir hakem atar
+export async function assignReviewer(req, res) {
+  const { id } = req.params;
+  const { reviewer_id } = req.body;
+  try {
+    // Seçilen kullanıcının gerçekten 'reviewer' rolünde olduğunu doğrula
+    const reviewer = await pool.query(`SELECT id FROM users WHERE id = $1 AND role = 'reviewer'`, [reviewer_id]);
+    if (reviewer.rows.length === 0) {
+      return res.status(400).json({ error: 'Seçilen kullanıcı bir hakem değil.' });
+    }
+
+    await pool.query(
+      `INSERT INTO reviewer_assignments (submission_id, reviewer_id) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [id, reviewer_id]
+    );
+    res.status(201).json({ message: 'Hakem atandı.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Hakem atanırken hata oluştu.' });
+  }
+}
+
+// DELETE /api/submissions/:id/reviewers/:reviewerId
+// Admin: bir hakemin atamasını kaldırır (henüz oy vermediyse)
+export async function unassignReviewer(req, res) {
+  const { id, reviewerId } = req.params;
+  try {
+    const existingVote = await pool.query(
+      `SELECT id FROM reviews WHERE submission_id = $1 AND reviewer_id = $2`,
+      [id, reviewerId]
+    );
+    if (existingVote.rows.length > 0) {
+      return res.status(400).json({ error: 'Bu hakem zaten oy vermiş, atama kaldırılamaz.' });
+    }
+
+    await pool.query(
+      `DELETE FROM reviewer_assignments WHERE submission_id = $1 AND reviewer_id = $2`,
+      [id, reviewerId]
+    );
+    res.json({ message: 'Hakem ataması kaldırıldı.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Atama kaldırılırken hata oluştu.' });
+  }
+}

@@ -6,6 +6,9 @@ import {
   createSubmission,
   getMySubmissions,
   getAssignedSubmissions,
+  getAllSubmissionsForAdmin,
+  assignReviewer,
+  unassignReviewer,
 } from '../controllers/submission.controller.js';
 
 const router = Router();
@@ -39,5 +42,12 @@ router.get('/mine', requireAuth, getMySubmissions);
 
 // Hakem olarak bana atanan bildirileri listele
 router.get('/assigned', requireAuth, requireRole('reviewer', 'admin'), getAssignedSubmissions);
+
+// Admin: sistemdeki tüm bildirileri, atanan hakemleriyle birlikte gör
+router.get('/all', requireAuth, requireRole('admin'), getAllSubmissionsForAdmin);
+
+// Admin: bir bildiriye manuel hakem ata / atamayı kaldır
+router.post('/:id/reviewers', requireAuth, requireRole('admin'), assignReviewer);
+router.delete('/:id/reviewers/:reviewerId', requireAuth, requireRole('admin'), unassignReviewer);
 
 export default router;

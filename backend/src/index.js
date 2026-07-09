@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.routes.js';
 import congressRoutes from './routes/congress.routes.js';
 import submissionRoutes from './routes/submission.routes.js';
 import reviewRoutes from './routes/review.routes.js';
+import userRoutes from './routes/user.routes.js';
 
 dotenv.config();
 
@@ -28,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/congresses', congressRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/users', userRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'Kongre Yönetim Sistemi API çalışıyor.' });

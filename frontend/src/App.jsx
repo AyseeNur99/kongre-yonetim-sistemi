@@ -521,6 +521,62 @@ function AdminPanel({ token, onCreated }) {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
+  const [submissions, setSubmissions] = useState([]);
+  const [reviewers, setReviewers] = useState([]);
+  const [picks, setPicks] = useState({}); // { [submissionId]: reviewerIdSeçili }
+
+  const authHeaders = { Authorization: `Bearer ${token}` };
+
+  const loadAssignmentData = useCallback(async () => {
+    try {
+      const [sRes, rRes] = await Promise.all([
+        fetch(`${API}/submissions/all`, { headers: authHeaders }),
+        fetch(`${API}/users/reviewers`, { headers: authHeaders }),
+      ]);
+      setSubmissions(await sRes.json());
+      setReviewers(await rRes.json());
+    } catch (e) {
+      setErr("Hakem atama verileri yüklenemedi.");
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadAssignmentData();
+  }, [loadAssignmentData]);
+
+  const assign = async (submissionId) => {
+    const reviewerId = picks[submissionId];
+    if (!reviewerId) return;
+    setErr("");
+    try {
+      const res = await fetch(`${API}/submissions/${submissionId}/reviewers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ reviewer_id: reviewerId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Atama başarısız.");
+      loadAssignmentData();
+    } catch (e2) {
+      setErr(e2.message);
+    }
+  };
+
+  const unassign = async (submissionId, reviewerId) => {
+    setErr("");
+    try {
+      const res = await fetch(`${API}/submissions/${submissionId}/reviewers/${reviewerId}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Kaldırma başarısız.");
+      loadAssignmentData();
+    } catch (e2) {
+      setErr(e2.message);
+    }
+  };
+
   const createCongress = async (e) => {
     e.preventDefault();
     setErr("");
@@ -599,6 +655,82 @@ function AdminPanel({ token, onCreated }) {
           {err}
         </p>
       )}
+
+      <div className="md:col-span-2 pt-4" style={{ borderTop: `1px solid ${C.line}` }}>
+        <h2 style={serif} className="text-lg font-semibold mb-3 mt-4">Hakem Atama</h2>
+        {submissions.length === 0 ? (
+          <p className="text-sm" style={{ color: C.inkSoft }}>Henüz bir bildiri yok.</p>
+        ) : (
+          <div className="space-y-4">
+            {submissions.map((s) => {
+              const assignedIds = s.reviewers.map((r) => r.reviewer_id);
+              const available = reviewers.filter((r) => !assignedIds.includes(r.id));
+              return (
+                <div key={s.id} className="rounded-xl p-4" style={{ border: `1px solid ${C.line}` }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-sm">{s.title}</div>
+                      <div className="text-xs" style={{ color: C.inkSoft }}>
+                        {s.author_name} · {s.congress_title} — {s.theme_name}
+                      </div>
+                    </div>
+                    <StatusBadge status={s.status} />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {s.reviewers.length === 0 && (
+                      <span className="text-xs" style={{ color: C.inkSoft }}>Henüz hakem atanmamış.</span>
+                    )}
+                    {s.reviewers.map((r) => (
+                      <span
+                        key={r.reviewer_id}
+                        className="inline-flex items-center gap-2 rounded-full pl-3 pr-1.5 py-1 text-xs"
+                        style={{ background: C.paper, border: `1px solid ${C.line}` }}
+                      >
+                        {r.reviewer_name}
+                        {r.decision && (
+                          <span style={{ color: r.decision === "approved" ? C.success : C.danger }}>
+                            ({r.decision === "approved" ? "onay" : "red"})
+                          </span>
+                        )}
+                        {!r.decision && (
+                          <button
+                            onClick={() => unassign(s.id, r.reviewer_id)}
+                            title="Atamayı kaldır"
+                            className="rounded-full h-4 w-4 flex items-center justify-center"
+                            style={{ background: C.danger, color: "#fff" }}
+                          >
+                            <XCircle size={11} />
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+
+                  {available.length > 0 && (
+                    <div className="flex gap-2 mt-3">
+                      <select
+                        className={inputClass}
+                        style={{ ...inputStyle, maxWidth: 240 }}
+                        value={picks[s.id] || ""}
+                        onChange={(e) => setPicks({ ...picks, [s.id]: e.target.value })}
+                      >
+                        <option value="">Hakem seç...</option>
+                        {available.map((r) => (
+                          <option key={r.id} value={r.id}>{r.full_name}</option>
+                        ))}
+                      </select>
+                      <Button variant="ghost" onClick={() => assign(s.id)} disabled={!picks[s.id]}>
+                        Ata
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
