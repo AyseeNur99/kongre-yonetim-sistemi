@@ -375,15 +375,25 @@ function MySubmissions({ items }) {
     <div className="space-y-3">
       <h2 style={serif} className="text-xl font-semibold mb-2">Bildirilerim</h2>
       {items.map((s) => (
-        <div key={s.id} className="rounded-xl p-5 flex items-center justify-between gap-4" style={{ border: `1px solid ${C.line}` }}>
-          <div>
-            <div className="font-semibold">{s.title}</div>
-            <div className="text-xs mt-1" style={{ color: C.inkSoft }}>
-              {s.congress_title} · {s.theme_name}
+        <div key={s.id} className="rounded-xl p-5" style={{ border: `1px solid ${C.line}` }}>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-semibold">{s.title}</div>
+              <div className="text-xs mt-1" style={{ color: C.inkSoft }}>
+                {s.congress_title} · {s.theme_name}
+              </div>
+              <FileLink fileName={s.file_name} />
             </div>
-            <FileLink fileName={s.file_name} />
+            <StatusBadge status={s.status} />
           </div>
-          <StatusBadge status={s.status} />
+
+          <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.line}` }}>
+            {s.total_reviewers > 0 ? (
+              <VoteMeter approved={s.approved_count} rejected={s.rejected_count} total={s.total_reviewers} />
+            ) : (
+              <span className="text-xs" style={{ color: C.inkSoft }}>Henüz hakem atanmamış.</span>
+            )}
+          </div>
         </div>
       ))}
     </div>

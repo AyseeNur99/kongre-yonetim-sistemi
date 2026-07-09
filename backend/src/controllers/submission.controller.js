@@ -3,8 +3,17 @@ import { pool } from '../config/db.js';
 
 // file_path veritabanında tam sunucu yolu olarak tutulur (örn: "src/uploads/168...pdf").
 // Tarayıcının dosyaya ulaşabilmesi için sadece dosya adını çıkarıp /uploads altında sunuyoruz.
+// Ayrıca PostgreSQL'den COUNT() sonuçları string olarak gelir (bigint), sayıya çeviriyoruz.
 function withFileName(row) {
-  return { ...row, file_name: path.basename(row.file_path) };
+  return {
+    ...row,
+    file_name: path.basename(row.file_path),
+    ...(row.total_reviewers !== undefined && {
+      total_reviewers: parseInt(row.total_reviewers, 10),
+      approved_count: parseInt(row.approved_count, 10),
+      rejected_count: parseInt(row.rejected_count, 10),
+    }),
+  };
 }
 
 // POST /api/submissions
@@ -62,7 +71,10 @@ async function assignReviewersToSubmission(submissionId) {
 export async function getMySubmissions(req, res) {
   try {
     const result = await pool.query(
-      `SELECT s.*, t.name AS theme_name, c.title AS congress_title
+      `SELECT s.*, t.name AS theme_name, c.title AS congress_title,
+              (SELECT COUNT(*) FROM reviewer_assignments ra WHERE ra.submission_id = s.id) AS total_reviewers,
+              (SELECT COUNT(*) FROM reviews r WHERE r.submission_id = s.id AND r.decision = 'approved') AS approved_count,
+              (SELECT COUNT(*) FROM reviews r WHERE r.submission_id = s.id AND r.decision = 'rejected') AS rejected_count
        FROM submissions s
        JOIN themes t ON s.theme_id = t.id
        JOIN congresses c ON t.congress_id = c.id
