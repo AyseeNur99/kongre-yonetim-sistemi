@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { FileText, LogOut, Upload, Users, Building2, CheckCircle2, XCircle, Clock, Plus, ChevronRight, Trash2, Pencil, Save, X } from "lucide-react";
+import { FileText, LogOut, Upload, Users, Building2, CheckCircle2, XCircle, Clock, Plus, ChevronRight, Trash2, Pencil, Save, X, User as UserIcon } from "lucide-react";
 
 const API = "http://localhost:5000/api";
 const FILES_BASE = "http://localhost:5000/uploads";
@@ -261,6 +261,7 @@ function Dashboard({ token, user, onLogout }) {
   }, [loadAll]);
 
   const tabs = [
+    { id: "profile", label: "Profilim", icon: UserIcon },
     { id: "congresses", label: "Kongreler", icon: Building2 },
     { id: "mine", label: "Bildirilerim", icon: FileText },
     { id: "submit", label: "Yeni Bildiri", icon: Upload },
@@ -328,6 +329,7 @@ function Dashboard({ token, user, onLogout }) {
           </p>
         )}
 
+        {tab === "profile" && <ProfilePage token={token} user={user} mySubmissions={mySubmissions} />}
         {tab === "congresses" && <CongressList congresses={congresses} />}
         {tab === "mine" && <MySubmissions items={mySubmissions} token={token} onChanged={loadAll} />}
         {tab === "submit" && (
@@ -338,6 +340,154 @@ function Dashboard({ token, user, onLogout }) {
         )}
         {tab === "admin" && <AdminPanel token={token} onCreated={loadAll} congresses={congresses} />}
       </main>
+    </div>
+  );
+}
+
+function ProfilePage({ token, user, mySubmissions }) {
+  const [profile, setProfile] = useState(null);
+  const [form, setForm] = useState({ full_name: "", institution: "" });
+  const [editing, setEditing] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/users/me`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      setProfile(data);
+      setForm({ full_name: data.full_name, institution: data.institution || "" });
+    } catch (e) {
+      setErr("Profil yüklenemedi.");
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    try {
+      const res = await fetch(`${API}/users/me`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Güncelleme başarısız.");
+      setProfile(data);
+      setEditing(false);
+      setMsg("Profil güncellendi.");
+    } catch (e2) {
+      setErr(e2.message);
+    }
+  };
+
+  // Sadece KABUL EDİLEN bildiriler burada gösterilir — bir çeşit "yayın listesi" / başarı özeti.
+  // Reddedilenler ve beklemede olanlar bilinçli olarak gösterilmez, bu sayfa herkese
+  // açık bir profil/portfolyo gibi düşünülüyor.
+  const acceptedSubmissions = mySubmissions.filter((s) => s.status === "accepted");
+
+  const roleLabel = { author: "Yazar", reviewer: "Hakem", admin: "Yönetici" };
+
+  if (!profile) return <p className="text-sm" style={{ color: C.inkSoft }}>Yükleniyor...</p>;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 style={serif} className="text-xl font-semibold mb-3">Profilim</h2>
+        {msg && <p className="text-sm mb-3" style={{ color: C.success }}>{msg}</p>}
+        {err && (
+          <p className="text-sm mb-3 rounded-lg px-3 py-2" style={{ background: "#F3E4E1", color: C.danger }}>{err}</p>
+        )}
+
+        <div className="rounded-xl p-5" style={{ border: `1px solid ${C.line}` }}>
+          {editing ? (
+            <form onSubmit={save} className="max-w-sm space-y-3">
+              <Field label="Ad Soyad">
+                <input
+                  className={inputClass}
+                  style={inputStyle}
+                  value={form.full_name}
+                  onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                />
+              </Field>
+              <Field label="Kurum">
+                <input
+                  className={inputClass}
+                  style={inputStyle}
+                  value={form.institution}
+                  onChange={(e) => setForm({ ...form, institution: e.target.value })}
+                  placeholder="örn: Ankara Üniversitesi Tıp Fakültesi"
+                />
+              </Field>
+              <div className="flex gap-2">
+                <Button type="submit" variant="success">Kaydet</Button>
+                <Button type="button" variant="ghost" onClick={() => setEditing(false)}>Vazgeç</Button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="font-semibold text-lg">{profile.full_name}</div>
+                <div className="text-sm mt-1" style={{ color: C.inkSoft }}>{profile.email}</div>
+                <div className="text-sm mt-1" style={{ color: C.inkSoft }}>
+                  {profile.institution || "Kurum belirtilmemiş"}
+                </div>
+                <div className="flex items-center gap-2 mt-3">
+                  <span
+                    className="text-xs rounded-full px-3 py-1 font-semibold"
+                    style={{ background: C.paper, color: C.primaryDark, border: `1px solid ${C.line}` }}
+                  >
+                    {roleLabel[profile.role]}
+                  </span>
+                  <span className="text-xs" style={{ color: C.inkSoft }}>
+                    Üyelik: {new Date(profile.created_at).toLocaleDateString("tr-TR")}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditing(true)}
+                className="p-2 rounded-lg"
+                style={{ border: `1px solid ${C.line}`, color: C.primary }}
+                title="Profili düzenle"
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <h3 style={serif} className="text-lg font-semibold mb-3">Kabul Edilen Bildirilerim</h3>
+        {acceptedSubmissions.length === 0 ? (
+          <p className="text-sm" style={{ color: C.inkSoft }}>
+            Henüz kabul edilmiş bir bildirin yok.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {acceptedSubmissions.map((s) => (
+              <div
+                key={s.id}
+                className="rounded-xl p-4 flex items-center justify-between"
+                style={{ border: `1px solid ${C.line}` }}
+              >
+                <div>
+                  <div className="font-semibold text-sm">{s.title}</div>
+                  <div className="text-xs mt-1" style={{ color: C.inkSoft }}>
+                    {s.congress_title} · {s.theme_name}
+                  </div>
+                </div>
+                <CheckCircle2 size={18} color={C.success} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1175,7 +1325,7 @@ function AdminPanel({ token, onCreated, congresses }) {
           <div className="space-y-4">
             {submissions.map((s) => {
               const assignedIds = s.reviewers.map((r) => r.reviewer_id);
-              const available = reviewers.filter((r) => !assignedIds.includes(r.id));
+              const available = reviewers.filter((r) => !assignedIds.includes(r.id) && r.id !== s.author_id);
               return (
                 <div key={s.id} className="rounded-xl p-4" style={{ border: `1px solid ${C.line}` }}>
                   <div className="flex items-center justify-between">

@@ -65,7 +65,7 @@ export async function createSubmission(req, res) {
 
     // Bildiri yüklenir yüklenmez otomatik olarak 10 hakem atıyoruz.
     // (Basit yaklaşım: sistemdeki 'reviewer' rolündeki kullanıcılardan rastgele 10 tanesi)
-    await assignReviewersToSubmission(submission.id);
+    await assignReviewersToSubmission(submission.id, author_id);
 
     res.status(201).json(submission);
   } catch (err) {
@@ -74,10 +74,13 @@ export async function createSubmission(req, res) {
   }
 }
 
-// Yardımcı fonksiyon: bir bildiriye rastgele 10 hakem atar
-async function assignReviewersToSubmission(submissionId) {
+// Yardımcı fonksiyon: bir bildiriye rastgele 10 hakem atar.
+// Bildirinin kendi yazarı, aynı zamanda 'reviewer' rolündeyse bile ASLA kendi
+// bildirisine atanmaz — bu açık bir çıkar çatışması (conflict of interest) olurdu.
+async function assignReviewersToSubmission(submissionId, authorId) {
   const reviewers = await pool.query(
-    `SELECT id FROM users WHERE role = 'reviewer' ORDER BY RANDOM() LIMIT 10`
+    `SELECT id FROM users WHERE role = 'reviewer' AND id != $1 ORDER BY RANDOM() LIMIT 10`,
+    [authorId]
   );
 
   const insertPromises = reviewers.rows.map((r) =>
@@ -181,6 +184,12 @@ export async function assignReviewer(req, res) {
     const reviewer = await pool.query(`SELECT id FROM users WHERE id = $1 AND role = 'reviewer'`, [reviewer_id]);
     if (reviewer.rows.length === 0) {
       return res.status(400).json({ error: 'Seçilen kullanıcı bir hakem değil.' });
+    }
+
+    // Bildirinin kendi yazarını, kendi bildirisine hakem olarak atamayı engelle (çıkar çatışması)
+    const submission = await pool.query(`SELECT author_id FROM submissions WHERE id = $1`, [id]);
+    if (submission.rows.length > 0 && submission.rows[0].author_id === parseInt(reviewer_id, 10)) {
+      return res.status(400).json({ error: 'Bir bildirinin yazarı, kendi bildirisine hakem olarak atanamaz.' });
     }
 
     await pool.query(
