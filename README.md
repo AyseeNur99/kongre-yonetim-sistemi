@@ -22,16 +22,12 @@ gönderme ve hakem değerlendirme sistemi.
 6. 10 hakemin tamamı oy verdiğinde, çoğunluk kuralına göre
    (6/10 ve üzeri onay = kabul) bildirinin nihai durumu belirlenir
 
-> **Not:** Çoğunluk kuralı (6/10) varsayılan olarak ayarlandı — mentorunla
-> konuşup gerçek kuralı öğrendikten sonra `review.controller.js` içindeki
-> `finalizeDecisionIfComplete` fonksiyonunu güncelleyebilirsin.
-
 ## Kurulum
 
 ### 1. PostgreSQL kurulumu ve veritabanı oluşturma
 
 ```bash
-# PostgreSQL kurulu değilse kur, sonra:
+# PostgreSQL
 createdb kongre_yonetim
 psql kongre_yonetim < backend/schema.sql
 ```
@@ -42,29 +38,29 @@ psql kongre_yonetim < backend/schema.sql
 cd backend
 npm install
 cp .env.example .env
-# .env dosyasını kendi veritabanı bilgilerinle düzenle
+# .env dosyaları kendi veritabanım bilgileriyle düzenlendi
 npm run dev
 ```
 
-Sunucu `http://localhost:5000` adresinde çalışacak.
+Sunucu `http://localhost:5000` adresinde çalışiyor.
 
 ### 3. Test etmek için (Postman veya curl ile)
 
-**Kayıt ol:**
+**Kayıt olunup:**
 ```bash
 curl -X POST http://localhost:5000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"full_name":"Ahmet Yılmaz","email":"ahmet@example.com","password":"123456"}'
 ```
 
-**Giriş yap:**
+**Giriş yapılıyor:**
 ```bash
 curl -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"ahmet@example.com","password":"123456"}'
 ```
-Dönen `token`'ı kopyala, sonraki isteklerde `Authorization: Bearer <token>`
-header'ında kullan.
+Dönen `token`'ı kopyalandı, sonraki isteklerde `Authorization: Bearer <token>`
+header'ında kullanıldı
 
 ## Proje Yapısı
 
@@ -80,11 +76,3 @@ backend/
     controllers/           -> asıl iş mantığı (business logic)
     uploads/               -> yüklenen bildiri dosyaları
 ```
-
-## Sıradaki Adımlar
-
-- [ ] React ile frontend (kayıt, giriş, bildiri yükleme, hakem paneli ekranları)
-- [ ] Admin panelinden hakem atamayı manuel de yapabilme seçeneği
-- [ ] E-posta bildirimleri (bildiri kabul/red olunca yazara mail)
-- [ ] Bildiri durumunu takip etme sayfası (yazar kendi bildirisinin kaçtane
-      onay/red aldığını görebilsin)
