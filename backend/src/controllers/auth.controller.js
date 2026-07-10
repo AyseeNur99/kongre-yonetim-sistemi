@@ -11,6 +11,10 @@ export async function register(req, res) {
     return res.status(400).json({ error: 'İsim, e-posta ve şifre zorunludur.' });
   }
 
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Şifre en az 6 karakter olmalıdır.' });
+  }
+
   try {
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {

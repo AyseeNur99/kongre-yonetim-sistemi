@@ -103,6 +103,12 @@ function AuthScreen({ onAuth }) {
   const submit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (mode === "register" && form.password.length < 6) {
+      setError("Şifre en az 6 karakter olmalıdır.");
+      return;
+    }
+
     setLoading(true);
     try {
       const path = mode === "login" ? "/auth/login" : "/auth/register";
@@ -395,6 +401,27 @@ function MySubmissions({ items, token, onChanged }) {
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ title: "", abstract: "", file: null });
+  const [openReviewsId, setOpenReviewsId] = useState(null);
+  const [reviewsById, setReviewsById] = useState({});
+
+  const toggleReviews = async (id) => {
+    if (openReviewsId === id) {
+      setOpenReviewsId(null);
+      return;
+    }
+    setOpenReviewsId(id);
+    if (!reviewsById[id]) {
+      try {
+        const res = await fetch(`${API}/submissions/${id}/reviews`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        setReviewsById((prev) => ({ ...prev, [id]: data }));
+      } catch (e) {
+        setError("Yorumlar yüklenemedi.");
+      }
+    }
+  };
 
   const remove = async (id) => {
     if (!window.confirm("Bu bildiriyi silmek istediğine emin misin? Bu işlem geri alınamaz.")) return;
@@ -541,6 +568,46 @@ function MySubmissions({ items, token, onChanged }) {
                     <span className="text-xs" style={{ color: C.inkSoft }}>Henüz hakem atanmamış.</span>
                   )}
                 </div>
+
+                {voteStarted && (
+                  <>
+                    <button
+                      onClick={() => toggleReviews(s.id)}
+                      className="text-xs font-semibold mt-2"
+                      style={{ color: C.primary }}
+                    >
+                      {openReviewsId === s.id ? "Yorumları Gizle ▲" : "Hakem Yorumlarını Gör ▼"}
+                    </button>
+                    {openReviewsId === s.id && (
+                      <div className="mt-2 space-y-2">
+                        {!reviewsById[s.id] ? (
+                          <span className="text-xs" style={{ color: C.inkSoft }}>Yükleniyor...</span>
+                        ) : (
+                          reviewsById[s.id].map((r, i) => (
+                            <div
+                              key={i}
+                              className="rounded-lg p-3 text-xs"
+                              style={{ background: C.paper, border: `1px solid ${C.line}` }}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-semibold">{r.reviewer_label}</span>
+                                <span style={{ color: r.decision === "approved" ? C.success : C.danger }}>
+                                  {r.decision === "approved" ? "Onayladı" : "Reddetti"}
+                                </span>
+                              </div>
+                              {r.comment ? (
+                                <p style={{ color: C.inkSoft }}>{r.comment}</p>
+                              ) : (
+                                <p style={{ color: C.inkSoft, fontStyle: "italic" }}>Yorum yazılmamış.</p>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {!voteStarted && (
                   <p className="text-xs mt-2" style={{ color: C.inkSoft }}>
                     Henüz oy verilmedi, bu bildiriyi düzenleyebilir ya da silebilirsin.
@@ -921,6 +988,12 @@ function AdminPanel({ token, onCreated, congresses }) {
           <Field label="Başlangıç Tarihi">
             <input type="date" className={inputClass} style={inputStyle} value={congress.start_date} onChange={(e) => setCongress({ ...congress, start_date: e.target.value })} />
           </Field>
+          <Field label="Bitiş Tarihi">
+            <input type="date" className={inputClass} style={inputStyle} value={congress.end_date} onChange={(e) => setCongress({ ...congress, end_date: e.target.value })} />
+          </Field>
+          <Field label="Son Başvuru Tarihi">
+            <input type="date" className={inputClass} style={inputStyle} value={congress.submission_deadline} onChange={(e) => setCongress({ ...congress, submission_deadline: e.target.value })} />
+          </Field>
           <Button type="submit" variant="accent">Kongre Oluştur</Button>
         </form>
       </div>
@@ -1011,6 +1084,13 @@ function AdminPanel({ token, onCreated, congresses }) {
                         style={inputStyle}
                         value={editCongressForm.start_date}
                         onChange={(e) => setEditCongressForm({ ...editCongressForm, start_date: e.target.value })}
+                      />
+                      <input
+                        type="date"
+                        className={inputClass}
+                        style={inputStyle}
+                        value={editCongressForm.end_date}
+                        onChange={(e) => setEditCongressForm({ ...editCongressForm, end_date: e.target.value })}
                       />
                       <input
                         type="date"

@@ -11,6 +11,7 @@ import {
   unassignReviewer,
   deleteSubmission,
   updateSubmission,
+  getSubmissionReviews,
 } from '../controllers/submission.controller.js';
 
 const router = Router();
@@ -57,5 +58,8 @@ router.delete('/:id', requireAuth, deleteSubmission);
 
 // Yazar: kendi bildirisini düzenle (başlık/özet, isteğe bağlı yeni dosya) — henüz hiç oy verilmemişse
 router.patch('/:id', requireAuth, upload.single('file'), updateSubmission);
+
+// Yazar: kendi bildirisine gelen hakem yorumlarını gör (kimlik gizli)
+router.get('/:id/reviews', requireAuth, getSubmissionReviews);
 
 export default router;

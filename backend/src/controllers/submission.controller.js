@@ -305,3 +305,35 @@ export async function updateSubmission(req, res) {
     res.status(500).json({ error: 'Bildiri güncellenirken hata oluştu.' });
   }
 }
+
+// GET /api/submissions/:id/reviews
+// Yazar, kendi bildirisine gelen hakem yorumlarını görebilir.
+// Kör değerlendirme (blind review) prensibiyle hakem isimleri GİZLENİR — yazar sadece
+// "Hakem 1", "Hakem 2" gibi sıralı bir etiket ve kararı/yorumu görür, kimin yazdığını bilemez.
+export async function getSubmissionReviews(req, res) {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const submission = await pool.query(`SELECT author_id FROM submissions WHERE id = $1`, [id]);
+    if (submission.rows.length === 0) {
+      return res.status(404).json({ error: 'Bildiri bulunamadı.' });
+    }
+    if (submission.rows[0].author_id !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Bu bildirinin yorumlarını görme yetkiniz yok.' });
+    }
+
+    const result = await pool.query(
+      `SELECT decision, comment, reviewed_at FROM reviews WHERE submission_id = $1 ORDER BY reviewed_at`,
+      [id]
+    );
+
+    // Hakem kimliğini gizleyip sadece sıra numarası veriyoruz (kör değerlendirme)
+    const anonymized = result.rows.map((r, i) => ({ ...r, reviewer_label: `Hakem ${i + 1}` }));
+
+    res.json(anonymized);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Yorumlar getirilirken hata oluştu.' });
+  }
+}
